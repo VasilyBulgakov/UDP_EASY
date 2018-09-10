@@ -10,10 +10,6 @@ using System.Net.Sockets;
 
 namespace UDP_EASY
 {
-
-
-    
-
     class UDPReader
     {
         private const ushort _classId = 176;
@@ -44,6 +40,8 @@ namespace UDP_EASY
         public UDPReader()
         {
             udp = new UdpClient(LocalPort);
+            Reset();
+
             queue = Queue.Synchronized(queue);
 
             startRecieve();
@@ -71,13 +69,24 @@ namespace UDP_EASY
             while (queue.Count > 0)
             {
                 uNetPackage packet = (uNetPackage)queue.Dequeue();
+
                 if(packet.ClassID == 0)
                 {
                     if(packet.CmdID == NetCommands.report.CmdID())
                     {
                         ReportLocal();
-                        suicideTimer.Restart();
                     }
+                    else if (packet.CmdID == NetCommands.setLang.CmdID())
+                    {
+                        int res;
+                        if (int.TryParse(Encoding.ASCII.GetString(packet.GetData()), out res))
+                        {
+                            writer.SetLanguage(res);
+                            Console.WriteLine("Lang: " + res);
+                            Report();
+                        }
+                    }
+                    suicideTimer.Restart();
                 }
 
                 if (packet.ClassID != 160) continue;           
@@ -134,8 +143,7 @@ namespace UDP_EASY
                         {
                             Console.WriteLine("game run collision");  
                         }                        
-                    }
-                    
+                    }                  
 
                     Report();
                 }
@@ -199,14 +207,27 @@ namespace UDP_EASY
             {
                 byte[] data = udp.EndReceive(_iar, ref RemoteIpEndPoint);
                 startRecieve();
-                
+
+                // TODO: Make unitversal queue of <byte[], IPEndPoint>
+
                 uNetPackage packet;
                 //Console.WriteLine(String.Join(", ", DT_Request) + " | " + String.Join(", ", data) );
-                Console.WriteLine( (IPAddress.IsLoopback(RemoteIpEndPoint.Address) ? "local" : "remote") );
-                if (data.SequenceEqual(DT_Request))
+                //Console.WriteLine( (IPAddress.IsLoopback(RemoteIpEndPoint.Address) ? "local" : "remote") );
+                if(IPAddress.IsLoopback(RemoteIpEndPoint.Address))
                 {
-                    //Console.WriteLine("equal");
-                    packet = new uNetPackage(0, NetCommands.report.CmdID());
+                    if (data.SequenceEqual(DT_Request))
+                    {
+                        //Console.WriteLine("equal");
+                        packet = new uNetPackage(0, NetCommands.report.CmdID());
+                    }
+                    else
+                    {
+                        //read DT data
+                        string dtStr = Convert(data);
+                        Console.WriteLine("dt: " + dtStr);
+                        packet = new uNetPackage(0, NetCommands.setLang.CmdID(), Encoding.ASCII.GetBytes(dtStr));
+                    }
+                        
                 }
                 else
                 {
@@ -391,5 +412,23 @@ namespace UDP_EASY
 
             Console.SetCursorPosition(0, curPos);
         }
+
+        /// <summary>
+        /// Конверсия UDP пакета DT контроллера
+        /// Удаляет нулевые байты используемые контроллером после кажого символа и в конце строки
+        /// </summary>
+        /// <param name="DT_Packet">данные присланные контроллером</param>
+        /// <returns>строка</returns>
+        public static string Convert(byte[] DT_Packet)
+        {
+            string data = "";
+            foreach (var b in DT_Packet)
+            {
+                if (b == 0) continue;
+                data += (char)b;
+            }
+            return data;
+        }
+
     }
 }
