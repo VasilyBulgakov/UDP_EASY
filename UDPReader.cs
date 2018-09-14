@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
+using System.Diagnostics;
+
 
 using System.Net;
 using System.Net.Sockets;
@@ -21,18 +23,18 @@ namespace UDP_EASY
         public int LocalPort = 5000;
         public int RemotePort = 5001;        
 
-        private System.Collections.Generic.Dictionary<IPEndPoint, ClientData> clients = new System.Collections.Generic.Dictionary<IPEndPoint, ClientData>();
+        private Dictionary<IPEndPoint, ClientData> clients = new Dictionary<IPEndPoint, ClientData>();
 
         UdpClient udp;
 
         private Queue queue = new Queue();
 
 
-        GameStateWriter writer = new GameStateWriter();
+        GameStates writer = new GameStates();
 
 
         private int suicideTime = 0;
-        System.Diagnostics.Stopwatch suicideTimer = new System.Diagnostics.Stopwatch();
+        Stopwatch suicideTimer = new Stopwatch();
 
         public int MaxWaitBeforeDisconnect = 12000;
 
@@ -58,9 +60,6 @@ namespace UDP_EASY
             checkSuicide();
 
             checkClients();
-            //writer.TryWrite();
-
-            //writeConsoleStatus();
         }
 
 
@@ -68,73 +67,47 @@ namespace UDP_EASY
         {
             while (queue.Count > 0)
             {
-                uNetPackage packet = (uNetPackage)queue.Dequeue();
+                NetData netData = (NetData)queue.Dequeue();
 
-                if(packet.ClassID == 0)
+                uNetPackage packet = netData.Packet;
+                IPEndPoint addr = netData.Address;
+
+                if (packet.ClassID == 0)
                 {
-                    if(packet.CmdID == NetCommands.report.CmdID())
-                    {
-                        ReportLocal();
-                    }
-                    else if (packet.CmdID == NetCommands.setLang.CmdID())
-                    {
-                        int res;
-                        if (int.TryParse(Encoding.ASCII.GetString(packet.GetData()), out res))
-                        {
-                            writer.SetLanguage(res);
-                            Console.WriteLine("Lang: " + res);
-                            Report();
-                        }
-                    }
-                    suicideTimer.Restart();
+                    processDTPacket(packet);
                 }
 
                 if (packet.ClassID != 160) continue;           
 
                 if (packet.CmdID == NetCommands.reg.CmdID())
-                {
-                    try
-                    {
-                        string str = Encoding.ASCII.GetString(packet.GetData());
-                        var clientPoint = new IPEndPoint(IPAddress.Parse(str), RemotePort);
-                        
-                        // Register client or restart timer if already registered
-                        if ( !clients.ContainsKey(clientPoint) )
-                        {
-                            clients.Add(clientPoint, new ClientData());                            
-                            Console.WriteLine("Registered: " + str);
-                        }
-                        else {
-                            // Console.WriteLine("Already registered: " + str);
-                            clients[clientPoint].LastUpdate.Restart();
-                        }
-
-                        Report();
+                {                    
+                    // Register client or restart timer if already registered
+                    if ( clients.ContainsKey(addr) ) {
+                        clients[addr].LastUpdate.Restart();                        
                     }
-                    catch(Exception e)
-                    {
-                        Console.WriteLine(e.Message);
-                    }            
+                    else {
+                        clients.Add(addr, new ClientData());
+                        Console.WriteLine("Registered: " + addr.ToString());
+                    }
+                    Report();                         
                 }
 
                 if (packet.CmdID == NetCommands.puzzleState.CmdID())
                 {
                     var data = packet.GetData();
                     short gameID = BitConverter.ToInt16(data, 0);
-                    short newState = BitConverter.ToInt16(data, 2);              
-                    
+                    short newState = BitConverter.ToInt16(data, 2);
+                   
+                    Console.WriteLine("state " + newState.ToString() + " for " + gameID.ToString() + " set from: " + addr.ToString() );
 
-                    var clientPoint = new IPEndPoint(IPAddress.Parse(Encoding.ASCII.GetString(data, 4, data.Length - 4)), RemotePort);
-                    Console.WriteLine("state " + newState.ToString() + " for " + gameID.ToString() + " set from: " + clientPoint.ToString() );
-
-                    if( !clients.ContainsKey(clientPoint)) {
-                        clients.Add(clientPoint, new ClientData());
+                    if( !clients.ContainsKey(addr)) {
+                        clients.Add(addr, new ClientData());
                     }
 
                     if (newState == HackGameState.InProgress.GetID())
-                        clients[clientPoint].CurrentGame = gameID;
+                        clients[addr].CurrentGame = gameID;
                     else
-                        clients[clientPoint].CurrentGame = 0;
+                        clients[addr].CurrentGame = 0;
 
                     if( !writer.SetState(gameID, NetCommandsExtension.GetState(newState)) )
                     {
@@ -163,11 +136,32 @@ namespace UDP_EASY
                 }
                 if(packet.CmdID == NetCommands.unreg.CmdID())
                 {
-                    string str = Encoding.ASCII.GetString(packet.GetData());
-                    removeClient(new IPEndPoint(IPAddress.Parse(str), RemotePort));                    
+                    removeClient(addr);                    
                 }
             }
         }
+
+        private void processDTPacket(uNetPackage packet)
+        {
+            if (packet.CmdID == NetCommands.report.CmdID())
+            {
+                ReportLocal();
+            }
+            else if (packet.CmdID == NetCommands.setLang.CmdID())
+            {
+                int res;
+                if (int.TryParse(Encoding.ASCII.GetString(packet.GetData()), out res))
+                {
+                    writer.SetLanguage(res);
+                    Console.WriteLine("Lang: " + res);
+                    Report();
+                }
+            }
+            suicideTimer.Restart();
+        }
+
+
+
 
         private void checkSuicide()
         {
@@ -195,11 +189,13 @@ namespace UDP_EASY
 
 
         private void startRecieve()
-        {
-            //Console.WriteLine("begin recieve");
+        {            
             udp.BeginReceive(new AsyncCallback(recieveCallback), this);
         }
-
+        /// <summary>
+        /// Чтение полученных данных, добавление в очередь обработки пакета
+        /// </summary>
+        /// <param name="_iar"></param>
         private void recieveCallback(IAsyncResult _iar)
         {            
             IPEndPoint RemoteIpEndPoint = new IPEndPoint(IPAddress.Any, LocalPort);
@@ -207,43 +203,24 @@ namespace UDP_EASY
             {
                 byte[] data = udp.EndReceive(_iar, ref RemoteIpEndPoint);
                 startRecieve();
-
-                // TODO: Make unitversal queue of <byte[], IPEndPoint>
-
-                uNetPackage packet;
-                //Console.WriteLine(String.Join(", ", DT_Request) + " | " + String.Join(", ", data) );
-                //Console.WriteLine( (IPAddress.IsLoopback(RemoteIpEndPoint.Address) ? "local" : "remote") );
+                
+                uNetPackage packet;                
+               
                 if(IPAddress.IsLoopback(RemoteIpEndPoint.Address))
                 {
-                    if (data.SequenceEqual(DT_Request))
-                    {
-                        //Console.WriteLine("equal");
+                    if (data.SequenceEqual(DT_Request)) {
                         packet = new uNetPackage(0, NetCommands.report.CmdID());
                     }
-                    else
-                    {
-                        //read DT data
-                        string dtStr = Convert(data);
-                        Console.WriteLine("dt: " + dtStr);
-                        packet = new uNetPackage(0, NetCommands.setLang.CmdID(), Encoding.ASCII.GetBytes(dtStr));
-                    }
-                        
+                    else {//read DT data      Console.WriteLine("dt: " + Convert(data));
+                        packet = new uNetPackage(0, NetCommands.setLang.CmdID(), Encoding.ASCII.GetBytes(Convert(data)));
+                    }                        
                 }
                 else
                 {
                     packet = new uNetPackage();
-                    packet.BuildFromArray(data);
-                    // add IP to packet data
-                    if (packet.CmdID == NetCommands.reg.CmdID() || packet.CmdID == NetCommands.unreg.CmdID()){
-                        packet.setData(Encoding.ASCII.GetBytes(RemoteIpEndPoint.Address.ToString()));
-                    }
-                    if(packet.CmdID == NetCommands.puzzleState.CmdID()){ 
-                        // append IP
-                        packet.setData( packet.GetData().Concat( Encoding.ASCII.GetBytes(RemoteIpEndPoint.Address.ToString()) ).ToArray() );
-                    }
+                    packet.BuildFromArray(data);                    
                 }
-                                                
-                queue.Enqueue(packet);
+                queue.Enqueue(new NetData(packet, RemoteIpEndPoint));
             }
             catch (Exception e)
             {
@@ -251,6 +228,7 @@ namespace UDP_EASY
                 startRecieve();
             }
         }
+
 
 
         /// <summary>

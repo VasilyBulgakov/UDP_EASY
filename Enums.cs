@@ -25,6 +25,15 @@ namespace UDP_EASY
         Finished,
         InProgress
     }
+    public enum HackGame
+    {
+        RoundBall,
+        Puzzle,
+        Monkey,
+        Globe,
+        Disk,
+        None
+    }
 
     public static class NetCommandsExtension
     {
@@ -68,6 +77,33 @@ namespace UDP_EASY
                 case 2: return HackGameState.InProgress;
 
                 default: return 0;
+            }
+        }
+
+        public static short GetID(this HackGame gameId)
+        {
+            switch (gameId)
+            {
+                case HackGame.Disk: return 21;
+                case HackGame.Monkey: return 41;
+                case HackGame.Puzzle: return 42;
+                case HackGame.Globe: return 43;
+                case HackGame.RoundBall: return 44;
+
+                default: return 0;
+            }
+        }
+        public static HackGame ToGame(int id)
+        {
+            switch (id)
+            {
+                case 21: return HackGame.Disk;
+                case 41: return HackGame.Monkey;
+                case 42: return HackGame.Puzzle;
+                case 43: return HackGame.Globe;
+                case 44: return HackGame.RoundBall;
+
+                default: return HackGame.None;
             }
         }
 
