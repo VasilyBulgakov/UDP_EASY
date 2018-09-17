@@ -79,18 +79,14 @@ namespace UDP_EASY
 
                 if (packet.ClassID != 160) continue;
 
-                 
+                bool registered = clients.ContainsKey(addr);
+                if(registered)
+                    clients[addr].LastUpdate.Restart();
 
 
                 if (packet.CmdID == NetCommands.reg.CmdID())
-                {
-                    bool registered = clients.ContainsKey(addr);
-                    if (registered)
-                    {
-                        clients[addr].LastUpdate.Restart();
-                    }
-                    else
-                    {
+                {  
+                    if(!registered){
                         clients.Add(addr, new ClientData());
                         Console.WriteLine("Registered: " + addr.ToString());
                     }
@@ -100,28 +96,14 @@ namespace UDP_EASY
                 if (packet.CmdID == NetCommands.puzzleState.CmdID())
                 {
                     var data = packet.GetData();
-                    short gameID = BitConverter.ToInt16(data, 0);
-                    short newState = BitConverter.ToInt16(data, 2);
-                   
-                    Console.WriteLine("state " + newState.ToString() + " for " + gameID.ToString() + " set from: " + addr.ToString() );
+                    
+                    HackGame game = NetCommandsExtension.ToGame(BitConverter.ToInt16(data, 0));
+                    HackGameState newState = NetCommandsExtension.GetState( BitConverter.ToInt16(data, 2) ); 
 
-                    if( !clients.ContainsKey(addr)) {
-                        clients.Add(addr, new ClientData());
-                    }
-
-                    if (newState == HackGameState.InProgress.GetID())
-                        clients[addr].CurrentGame = gameID;
-                    else
-                        clients[addr].CurrentGame = 0;
-
-                    if( !writer.SetState(NetCommandsExtension.ToGame(gameID), NetCommandsExtension.GetState(newState)) )
-                    {
-                        var selected = from client in clients where client.Value.CurrentGame == gameID select client;                           
-                        if (selected.Count() > 2)
-                        {
-                            Console.WriteLine("game run collision");  
-                        }                        
-                    }                  
+                    if( writer.SetState(game, newState, addr.Address) )                    
+                        Console.WriteLine("state " + newState.ToString() + " for " + game.ToString() + " set from: " + addr.ToString());  
+                    else                    
+                        Console.WriteLine("state collision, resetting" );                                            
 
                     Report();
                 }
@@ -327,14 +309,12 @@ namespace UDP_EASY
         /// <param name="client"></param>
         private void removeClient(IPEndPoint client)
         {
+            writer.RemoveClient(client.Address);
+
             ClientData data;
             if ( !clients.TryGetValue(client, out data) )  return;
 
-            short game = data.CurrentGame;
-            if (game != 0)
-            {
-                writer.SetState(NetCommandsExtension.ToGame(game), HackGameState.NotFinished);
-            }
+            short game = data.CurrentGame; 
 
             Console.WriteLine(client.ToString() + " disconnected, game: " + game.ToString());
             clients.Remove(client);

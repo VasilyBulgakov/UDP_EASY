@@ -42,17 +42,17 @@ namespace UDP_EASY
     {
         public HackGameState State = HackGameState.NotFinished;
 
-        public List<IPEndPoint> Clients = new List<IPEndPoint>(1);
+        public IPAddress Client = null;
 
         public GameStatus()
         {
             State = HackGameState.NotFinished;
         }
 
-        public GameStatus(HackGameState state, List<IPEndPoint> clients)
+        public GameStatus(HackGameState state, IPAddress client)
         {
             State = state;
-            Clients = clients;
+            Client = client;
         }
     }
 

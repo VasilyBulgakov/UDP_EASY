@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-
+using System.Net;
 
 namespace UDP_EASY
 {
@@ -31,13 +31,44 @@ namespace UDP_EASY
             return true;
         }
         
-        /// <returns>true - если состояние изменилось</returns>
-        public bool SetState(HackGame game, HackGameState newState)
+        /// <returns>true - если не было коллизии</returns>
+        public bool SetState(HackGame game, HackGameState newState, IPAddress clientAddr)
         {
-            if (newState == games[game].State) return false;
-            
-            games[game].State = newState;
-            return true;
+            bool allowedOperation = false;
+            var gameData = games[game];
+
+            if(gameData.State == HackGameState.NotFinished)
+                gameData.Client = null;
+           
+            if (gameData.Client == null || gameData.Client.Equals(clientAddr))
+            {
+                gameData.State = newState;
+                gameData.Client = clientAddr;
+
+                allowedOperation = true;
+            }
+
+            // reset in case of collision
+            if (!allowedOperation)
+                gameData.State = HackGameState.NotFinished;           
+
+            if (gameData.State == HackGameState.Finished || gameData.State == HackGameState.NotFinished)
+                gameData.Client = null;
+
+            return allowedOperation;
+        }
+
+        public void RemoveClient(IPAddress client)
+        {
+            foreach(var game in games)
+            {
+                if(game.Value.Client != null && game.Value.Client.Equals(client) )
+                {
+                    game.Value.State = HackGameState.NotFinished;
+                    game.Value.Client = null;
+                    Console.WriteLine("disconnecting " + client);
+                }
+            }
         }
 
 
@@ -70,5 +101,6 @@ namespace UDP_EASY
         {
             return games[game].State;
         }
+        
     }
 }
