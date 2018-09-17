@@ -93,7 +93,7 @@ namespace UDP_EASY
                 default: return 0;
             }
         }
-        public static HackGame ToGame(int id)
+        public static HackGame ToGame(short id)
         {
             switch (id)
             {

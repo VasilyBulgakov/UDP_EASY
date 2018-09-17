@@ -43,11 +43,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ClientData.cs" />
-    <Compile Include="GameStateWriter.cs" />
+    <Compile Include="Containers.cs" />
+    <Compile Include="GameStates.cs" />
     <Compile Include="IPClassTools.cs" />
     <Compile Include="Enums.cs" />
-    <Compile Include="NetData.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UDPReader.cs" />

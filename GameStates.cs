@@ -7,11 +7,6 @@ namespace UDP_EASY
     class GameStates
     {
         private int lang = 045;
-        private Dictionary<short, HackGameState> gameStates = new Dictionary<short, HackGameState>();
-
-
-        private bool stateChanged = false;
-
 
         private Dictionary<HackGame, GameStatus> games = new Dictionary<HackGame, GameStatus>();
   
@@ -26,43 +21,43 @@ namespace UDP_EASY
             games.Add(HackGame.Globe, new GameStatus());
         }
 
-        public void SetLanguage(int newLang)
-        {
-            if (newLang == lang) return;
 
-            stateChanged = true;
+        
+        /// <returns>true - если язык изменился</returns>
+        public bool SetLanguage(int newLang)
+        {
+            if (newLang == lang) return false;
             lang = newLang;
+            return true;
         }
-        /// <summary>
-        /// изменяет состояние игры на заданное
-        /// </summary>
-        /// <param name="gameID"></param>
-        /// <param name="newState"></param>
+        
         /// <returns>true - если состояние изменилось</returns>
-        public bool SetState(short gameID, HackGameState newState)
+        public bool SetState(HackGame game, HackGameState newState)
         {
-            if (newState == gameStates[gameID]) return false;
-
-            stateChanged = true;
-            gameStates[gameID] = newState;
+            if (newState == games[game].State) return false;
+            
+            games[game].State = newState;
             return true;
         }
 
-       
+
         /// <summary>
         /// Возвращает массив данных с отчётом о состоянии
+        /// порядок игр : disk monkey puzzle globe ball
         /// </summary>
-        /// <returns>lang(4b), gameStates[0 - n](bool 1b)</returns>
+        /// <returns>lang(4b), gameStates[0 - n](short 2b)</returns>
         public byte[] GetReport()
         {
-            List<byte> reportContent = new List<byte>();
+            List<byte> reportContent = new List<byte>();            
 
             reportContent.AddRange(BitConverter.GetBytes(lang));
-            foreach (var s in gameStates)
-            {
-                reportContent.AddRange(BitConverter.GetBytes(s.Value.GetID()));
-            }
-            
+                        
+            reportContent.AddRange(BitConverter.GetBytes(games[HackGame.Disk].State.GetID()));
+            reportContent.AddRange(BitConverter.GetBytes(games[HackGame.Monkey].State.GetID()));
+            reportContent.AddRange(BitConverter.GetBytes(games[HackGame.Puzzle].State.GetID()));
+            reportContent.AddRange(BitConverter.GetBytes(games[HackGame.Globe].State.GetID()));
+            reportContent.AddRange(BitConverter.GetBytes(games[HackGame.RoundBall].State.GetID()));
+
             return reportContent.ToArray();
         }
 
@@ -71,9 +66,9 @@ namespace UDP_EASY
             return lang;
         }
 
-        public HackGameState getGameState(short gameID)
+        public HackGameState getGameState(HackGame game)
         {
-            return gameStates[gameID];
+            return games[game].State;
         }
     }
 }

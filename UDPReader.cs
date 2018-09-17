@@ -77,15 +77,20 @@ namespace UDP_EASY
                     processDTPacket(packet);
                 }
 
-                if (packet.ClassID != 160) continue;           
+                if (packet.ClassID != 160) continue;
+
+                 
+
 
                 if (packet.CmdID == NetCommands.reg.CmdID())
-                {                    
-                    // Register client or restart timer if already registered
-                    if ( clients.ContainsKey(addr) ) {
-                        clients[addr].LastUpdate.Restart();                        
+                {
+                    bool registered = clients.ContainsKey(addr);
+                    if (registered)
+                    {
+                        clients[addr].LastUpdate.Restart();
                     }
-                    else {
+                    else
+                    {
                         clients.Add(addr, new ClientData());
                         Console.WriteLine("Registered: " + addr.ToString());
                     }
@@ -109,7 +114,7 @@ namespace UDP_EASY
                     else
                         clients[addr].CurrentGame = 0;
 
-                    if( !writer.SetState(gameID, NetCommandsExtension.GetState(newState)) )
+                    if( !writer.SetState(NetCommandsExtension.ToGame(gameID), NetCommandsExtension.GetState(newState)) )
                     {
                         var selected = from client in clients where client.Value.CurrentGame == gameID select client;                           
                         if (selected.Count() > 2)
@@ -122,8 +127,7 @@ namespace UDP_EASY
                 }
                 if (packet.CmdID == NetCommands.setLang.CmdID())
                 {
-                    var lang = BitConverter.ToInt16(packet.GetData(), 0);
-                    writer.SetLanguage(lang);
+                    writer.SetLanguage( BitConverter.ToInt16(packet.GetData(), 0) );
                     Report();
                 }
                 if(packet.CmdID  == NetCommands.ping.CmdID())
@@ -277,49 +281,25 @@ namespace UDP_EASY
 
         private void ReportLocal()
         {
-            //Console.WriteLine("Local Report");
             IPEndPoint point = new IPEndPoint(IPAddress.Loopback, 5001);
 
-            byte[] data = toDTArray(writer.getLang().ToString());
+            byte[] data;            
 
-            //udp.Send(data, data.Length, point);
-
-            data = toDTArray( "21" + ((writer.getGameState(21) == HackGameState.Finished) ? "1" : "0") );
+            data = toDTArray( "21" + ((writer.getGameState(HackGame.Disk) == HackGameState.Finished) ? "1" : "0") );
             udp.Send(data, data.Length, point);
 
-            data = toDTArray( "41" + ((writer.getGameState(41) == HackGameState.Finished) ? "1" : "0") );
+            data = toDTArray( "41" + ((writer.getGameState(HackGame.Monkey) == HackGameState.Finished) ? "1" : "0") );
             udp.Send(data, data.Length, point);
 
-            data = toDTArray( "42" + ((writer.getGameState(42) == HackGameState.Finished) ? "1" : "0") );
+            data = toDTArray( "42" + ((writer.getGameState(HackGame.Puzzle) == HackGameState.Finished) ? "1" : "0") );
             udp.Send(data, data.Length, point);
 
-            data = toDTArray( "43" + ((writer.getGameState(43) == HackGameState.Finished) ? "1" : "0") );
+            data = toDTArray( "43" + ((writer.getGameState(HackGame.Globe) == HackGameState.Finished) ? "1" : "0") );
             udp.Send(data, data.Length, point);
 
-            data = toDTArray( "44" + ((writer.getGameState(44) == HackGameState.Finished) ? "1" : "0") );
+            data = toDTArray( "44" + ((writer.getGameState(HackGame.RoundBall) == HackGameState.Finished) ? "1" : "0") );
             udp.Send(data, data.Length, point);
-        }
-
-        /// <summary>
-        /// Конверсия сообщения в формат DT пакета
-        /// Добавляет нулевой байт после каждого символа и 2 нулевых в конец
-        /// </summary>
-        /// <param name="message">сообщение для обраотки</param>
-        /// <returns></returns>
-        private static byte[] toDTArray(string message)
-        {
-            byte[] res = new byte[message.Length * 2 + 2];
-
-            var arr = message.ToCharArray();
-            for (int i = 0, j = 0; i < arr.Length; i++, j += 2)
-            {
-                res[j] = (byte)arr[i];
-                res[j + 1] = 0;
-            }
-            res[res.Length - 1] = 0;
-            res[res.Length - 2] = 0;
-            return res;
-        }
+        }       
 
         /// <summary>
         /// полный сброс UDP
@@ -353,7 +333,7 @@ namespace UDP_EASY
             short game = data.CurrentGame;
             if (game != 0)
             {
-                writer.SetState(game, HackGameState.NotFinished);
+                writer.SetState(NetCommandsExtension.ToGame(game), HackGameState.NotFinished);
             }
 
             Console.WriteLine(client.ToString() + " disconnected, game: " + game.ToString());
@@ -382,24 +362,45 @@ namespace UDP_EASY
             }
 
             Console.WriteLine("\nGame statuses");
-            Console.WriteLine(" Disk game: " + writer.getGameState(21).ToString() + fill);
-            Console.WriteLine(" Monkey game: " + writer.getGameState(41).ToString() + fill);
-            Console.WriteLine(" Puzzle game: " + writer.getGameState(42).ToString() + fill);
-            Console.WriteLine(" Globe game: " + writer.getGameState(43).ToString() + fill);
-            Console.WriteLine(" RB game: " + writer.getGameState(44).ToString() + fill);
+            Console.WriteLine(" Disk game: " + writer.getGameState(HackGame.Disk).ToString() + fill);
+            Console.WriteLine(" Monkey game: " + writer.getGameState(HackGame.Monkey).ToString() + fill);
+            Console.WriteLine(" Puzzle game: " + writer.getGameState(HackGame.Puzzle).ToString() + fill);
+            Console.WriteLine(" Globe game: " + writer.getGameState(HackGame.Globe).ToString() + fill);
+            Console.WriteLine(" RB game: " + writer.getGameState(HackGame.RoundBall).ToString() + fill);
 
             Console.SetCursorPosition(0, curPos);
         }
 
         /// <summary>
-        /// Конверсия UDP пакета DT контроллера
+        /// Конверсия сообщения в формат DT пакета
+        /// Добавляет нулевой байт после каждого символа и 2 нулевых в конец
+        /// </summary>
+        /// <param name="message">сообщение для обраотки</param>
+        /// <returns></returns>
+        private static byte[] toDTArray(string message)
+        {
+            byte[] res = new byte[message.Length * 2 + 2];
+
+            var arr = message.ToCharArray();
+            for (int i = 0, j = 0; i < arr.Length; i++, j += 2)
+            {
+                res[j] = (byte)arr[i];
+                res[j + 1] = 0;
+            }
+            res[res.Length - 1] = 0;
+            res[res.Length - 2] = 0;
+            return res;
+        }
+
+        /// <summary>
+        /// Конверсия пакета DT контроллера в обычную строку
         /// Удаляет нулевые байты используемые контроллером после кажого символа и в конце строки
         /// </summary>
         /// <param name="DT_Packet">данные присланные контроллером</param>
         /// <returns>строка</returns>
         public static string Convert(byte[] DT_Packet)
         {
-            string data = "";
+            string data = "";            
             foreach (var b in DT_Packet)
             {
                 if (b == 0) continue;
